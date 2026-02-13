@@ -1,0 +1,7 @@
+streamlit
+pandas
+langchain-groq
+langchain-experimental
+langchain-classic
+python-dotenv
+tabulate
