@@ -88,31 +88,31 @@ if uploaded_file is not None and api_key:
     agent = create_agent(df, api_key, uploaded_file.name, model_name)
 
     # 4. Chat Interface
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
     st.write("### Ask a Question")
-    st.caption("💡 Tip: Ask complete questions (e.g., 'What are the names of students who haven't paid?') for best results.")
+    user_question = st.text_input("Example: 'Plot a bar chart of Sales by Region and save it as plot.png'")
 
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-
-    user_question = st.chat_input("Ask something about your data...")
-
-    if user_question:
-        st.session_state.messages.append({"role": "user", "content": user_question})
-
-        with st.chat_message("user"):
-            st.markdown(user_question)
-
-        with st.chat_message("assistant"):
+    if st.button("Analyze"):
+        if user_question:
             with st.spinner("Analyzing data..."):
                 try:
-                    result = agent.invoke(user_question)
-                    response = result.get("output") if isinstance(result, dict) else result
-                    st.markdown(response)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
+                    # A. Cleanup: Delete old plot if it exists
+                    if os.path.exists("plot.png"):
+                        os.remove("plot.png")
+
+                    # B. The Prompt Injection
+                    # We secretly add this instruction to ensure the AI saves the file instead of showing it.
+                    enhanced_query = user_question + " If you generate a plot, save it as 'plot.png'. Do not use plt.show()."
+
+                    # C. Run Agent
+                    response = agent.run(enhanced_query)
+                    st.success("Analysis Complete!")
+                    st.write(response)
+
+                    # D. Check for Plot
+                    # If the file appeared, display it!
+                    if os.path.exists("plot.png"):
+                        st.image("plot.png", caption="Generated Visualization")
+
                 except Exception as e:
                     st.error(f"Error: {e}")
                     
