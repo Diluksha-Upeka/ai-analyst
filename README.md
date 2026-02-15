@@ -3,6 +3,7 @@
 An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upload a CSV file and chat with your data using natural language queries powered by AI.
 
 ![Demo Screenshot](dashboard.png) 
+![Chart Screenshot](plot.png)
 
 ## Features
 
