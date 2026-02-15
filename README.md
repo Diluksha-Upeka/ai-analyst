@@ -9,6 +9,7 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
 
 - **CSV Upload & Preview**: Easily upload and preview your data
 - **Quick Insights**: Instant dataset summary and correlation matrix
+- **Chart Generation**: Automatically generate visualizations and plots for your data
 - **Conversational AI**: Chat with your data using natural language
 - **Multiple Models**: Switch between Groq models (llama-3.3-70b-versatile, llama-3.1-8b-instant, etc.)
 - **Caching**: Optimized performance with smart caching
@@ -63,6 +64,7 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
 - "What are the top 5 highest-performing students?"
 - "Show me the correlation between sales and profit"
 - "Who are the customers with orders over $1000?"
+- "Generate a bar chart of sales by region"
 - "Generate a summary report of the dataset"
 
 ## Configuration
