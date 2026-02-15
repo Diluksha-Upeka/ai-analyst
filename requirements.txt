@@ -5,3 +5,4 @@ langchain-experimental
 langchain-classic
 python-dotenv
 tabulate
+matplotlib
