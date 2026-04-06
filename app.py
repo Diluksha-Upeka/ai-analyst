@@ -189,6 +189,189 @@ def compute_data_health(_df):
     }
 
 
+@st.cache_data
+def detect_date_columns(_df):
+    candidate_columns = []
+    sample_df = _df.head(2000)
+
+    for column in sample_df.columns:
+        series = sample_df[column]
+        if pd.api.types.is_datetime64_any_dtype(series):
+            candidate_columns.append(column)
+            continue
+
+        if not (
+            pd.api.types.is_object_dtype(series)
+            or pd.api.types.is_string_dtype(series)
+        ):
+            continue
+
+        non_null = series.dropna().astype(str).str.strip()
+        if non_null.empty:
+            continue
+
+        try:
+            parsed_dates = pd.to_datetime(non_null, errors="coerce", format="mixed")
+        except TypeError:
+            parsed_dates = pd.to_datetime(non_null, errors="coerce")
+
+        if float(parsed_dates.notna().mean()) >= 0.70:
+            candidate_columns.append(column)
+
+    return candidate_columns
+
+
+@st.cache_data
+def get_period_labels(_df, date_column, period_grain):
+    try:
+        parsed_dates = pd.to_datetime(_df[date_column], errors="coerce", format="mixed")
+    except TypeError:
+        parsed_dates = pd.to_datetime(_df[date_column], errors="coerce")
+
+    parsed_dates = parsed_dates.dropna()
+    if parsed_dates.empty:
+        return []
+
+    if period_grain == "Daily":
+        period_dt = parsed_dates.dt.floor("D")
+        labels = period_dt.dt.strftime("%Y-%m-%d")
+    elif period_grain == "Weekly":
+        period_obj = parsed_dates.dt.to_period("W-SUN")
+        period_dt = period_obj.dt.start_time
+        labels = period_dt.dt.strftime("%Y-%m-%d")
+    elif period_grain == "Quarterly":
+        period_obj = parsed_dates.dt.to_period("Q")
+        period_dt = period_obj.dt.to_timestamp()
+        labels = period_obj.astype(str)
+    else:  # Monthly
+        period_obj = parsed_dates.dt.to_period("M")
+        period_dt = period_obj.dt.to_timestamp()
+        labels = period_obj.astype(str)
+
+    ordered_periods = (
+        pd.DataFrame({"period_dt": period_dt, "period_label": labels})
+        .drop_duplicates(subset=["period_label"])
+        .sort_values(by="period_dt")
+    )
+
+    return ordered_periods["period_label"].tolist()
+
+
+@st.cache_data
+def compute_root_cause_period(
+    _df,
+    metric_column,
+    dimension_column,
+    date_column,
+    period_grain,
+    baseline_period,
+    comparison_period,
+):
+    working_df = _df[[metric_column, dimension_column, date_column]].copy()
+    working_df["_metric"] = pd.to_numeric(working_df[metric_column], errors="coerce")
+
+    try:
+        parsed_dates = pd.to_datetime(working_df[date_column], errors="coerce", format="mixed")
+    except TypeError:
+        parsed_dates = pd.to_datetime(working_df[date_column], errors="coerce")
+
+    working_df["_date"] = parsed_dates
+    working_df["_dimension"] = working_df[dimension_column].fillna("Unknown").astype(str).str.strip()
+    working_df.loc[working_df["_dimension"] == "", "_dimension"] = "Unknown"
+    working_df = working_df.dropna(subset=["_metric", "_date"])
+
+    if working_df.empty:
+        return None
+
+    if period_grain == "Daily":
+        period_dt = working_df["_date"].dt.floor("D")
+        period_label = period_dt.dt.strftime("%Y-%m-%d")
+    elif period_grain == "Weekly":
+        period_obj = working_df["_date"].dt.to_period("W-SUN")
+        period_dt = period_obj.dt.start_time
+        period_label = period_dt.dt.strftime("%Y-%m-%d")
+    elif period_grain == "Quarterly":
+        period_obj = working_df["_date"].dt.to_period("Q")
+        period_dt = period_obj.dt.to_timestamp()
+        period_label = period_obj.astype(str)
+    else:  # Monthly
+        period_obj = working_df["_date"].dt.to_period("M")
+        period_dt = period_obj.dt.to_timestamp()
+        period_label = period_obj.astype(str)
+
+    working_df["_period"] = period_label
+
+    scoped_df = working_df[working_df["_period"].isin([baseline_period, comparison_period])]
+    if scoped_df.empty:
+        return None
+
+    baseline_df = scoped_df[scoped_df["_period"] == baseline_period]
+    comparison_df = scoped_df[scoped_df["_period"] == comparison_period]
+
+    baseline_group = baseline_df.groupby("_dimension")["_metric"].sum()
+    comparison_group = comparison_df.groupby("_dimension")["_metric"].sum()
+
+    contribution_df = (
+        pd.concat(
+            [
+                baseline_group.rename("baseline_value"),
+                comparison_group.rename("comparison_value"),
+            ],
+            axis=1,
+        )
+        .fillna(0)
+        .reset_index()
+        .rename(columns={"_dimension": "dimension"})
+    )
+
+    contribution_df["change"] = contribution_df["comparison_value"] - contribution_df["baseline_value"]
+    contribution_df["abs_change"] = contribution_df["change"].abs()
+
+    total_change = float(contribution_df["change"].sum())
+    total_abs_change = float(contribution_df["abs_change"].sum())
+
+    if total_change != 0:
+        contribution_df["contribution_pct"] = (
+            contribution_df["change"] / total_change * 100
+        )
+    else:
+        contribution_df["contribution_pct"] = 0.0
+
+    if total_abs_change > 0:
+        contribution_df["share_of_abs_change_pct"] = (
+            contribution_df["abs_change"] / total_abs_change * 100
+        )
+    else:
+        contribution_df["share_of_abs_change_pct"] = 0.0
+
+    contribution_df = contribution_df.sort_values(by="abs_change", ascending=False)
+
+    baseline_total = float(baseline_df["_metric"].sum())
+    comparison_total = float(comparison_df["_metric"].sum())
+    net_change = comparison_total - baseline_total
+    pct_change = None
+    if baseline_total != 0:
+        pct_change = (net_change / baseline_total) * 100
+
+    numeric_columns = [
+        "baseline_value",
+        "comparison_value",
+        "change",
+        "abs_change",
+        "contribution_pct",
+        "share_of_abs_change_pct",
+    ]
+    contribution_df[numeric_columns] = contribution_df[numeric_columns].round(2)
+
+    return {
+        "baseline_total": round(baseline_total, 2),
+        "comparison_total": round(comparison_total, 2),
+        "net_change": round(net_change, 2),
+        "pct_change": None if pct_change is None else round(pct_change, 2),
+        "contribution_df": contribution_df,
+    }
+
+
 def is_query_safe(user_question):
     lowered = user_question.lower()
     for pattern in BLOCKED_QUERY_PATTERNS:
@@ -348,6 +531,189 @@ if uploaded_file is not None:
     with col2:
         if st.button("Correlation Matrix"):
             st.write(df.corr(numeric_only=True))
+
+    # Day 3 - Root Cause Explorer workflow
+    st.write("### Root Cause Explorer")
+    st.caption("Explain what drove metric change between two time periods.")
+
+    numeric_columns = df.select_dtypes(include=["number"]).columns.tolist()
+    date_columns = detect_date_columns(df)
+
+    if not numeric_columns:
+        st.info("Root Cause Explorer needs at least one numeric metric column.")
+    elif not date_columns:
+        st.info("No date-like column detected. Add a date column to run period-over-period root cause analysis.")
+    else:
+        root_metric = st.selectbox("Metric to explain", numeric_columns, key="root_metric")
+
+        dimension_candidates = [
+            column
+            for column in df.columns
+            if column != root_metric
+            and column not in date_columns
+            and (
+                pd.api.types.is_object_dtype(df[column])
+                or pd.api.types.is_string_dtype(df[column])
+                or pd.api.types.is_categorical_dtype(df[column])
+                or pd.api.types.is_bool_dtype(df[column])
+                or (
+                    pd.api.types.is_integer_dtype(df[column])
+                    and 2 <= df[column].nunique(dropna=True) <= 40
+                )
+            )
+        ]
+
+        if not dimension_candidates:
+            st.info("Root Cause Explorer needs at least one categorical column for breakdown.")
+        else:
+            root_dimension = st.selectbox("Break down change by", dimension_candidates, key="root_dimension")
+            root_date = st.selectbox("Date column", date_columns, key="root_date")
+            period_grain = st.selectbox(
+                "Period grain",
+                ["Monthly", "Quarterly", "Weekly", "Daily"],
+                key="root_period_grain",
+            )
+
+            period_labels = get_period_labels(df, root_date, period_grain)
+
+            if len(period_labels) < 2:
+                st.warning("Need at least two distinct periods to compare.")
+            else:
+                default_comparison_index = len(period_labels) - 1
+                default_baseline_index = max(0, default_comparison_index - 1)
+
+                baseline_period = st.selectbox(
+                    "Baseline period",
+                    period_labels,
+                    index=default_baseline_index,
+                    key="root_baseline_period",
+                )
+
+                comparison_candidates = [
+                    period for period in period_labels if period != baseline_period
+                ]
+                default_comparison_period = period_labels[default_comparison_index]
+                if default_comparison_period in comparison_candidates:
+                    comparison_default_index = comparison_candidates.index(default_comparison_period)
+                else:
+                    comparison_default_index = len(comparison_candidates) - 1
+
+                comparison_period = st.selectbox(
+                    "Comparison period",
+                    comparison_candidates,
+                    index=comparison_default_index,
+                    key="root_comparison_period",
+                )
+
+                top_n = st.slider(
+                    "Top drivers to display",
+                    min_value=3,
+                    max_value=15,
+                    value=8,
+                    key="root_top_n",
+                )
+
+                root_result = compute_root_cause_period(
+                    df,
+                    root_metric,
+                    root_dimension,
+                    root_date,
+                    period_grain,
+                    baseline_period,
+                    comparison_period,
+                )
+
+                if root_result is None or root_result["contribution_df"].empty:
+                    st.warning("Not enough valid rows for this root cause setup.")
+                else:
+                    baseline_total = root_result["baseline_total"]
+                    comparison_total = root_result["comparison_total"]
+                    net_change = root_result["net_change"]
+                    pct_change = root_result["pct_change"]
+
+                    summary_col1, summary_col2, summary_col3 = st.columns(3)
+
+                    with summary_col1:
+                        st.metric(f"{baseline_period} total", f"{baseline_total:,.2f}")
+
+                    with summary_col2:
+                        st.metric(f"{comparison_period} total", f"{comparison_total:,.2f}")
+
+                    with summary_col3:
+                        delta_text = "n/a" if pct_change is None else f"{pct_change:+.2f}%"
+                        st.metric("Net change", f"{net_change:,.2f}", delta=delta_text)
+
+                    if net_change > 0:
+                        st.success(
+                            f"{root_metric} increased by {net_change:,.2f} from {baseline_period} to {comparison_period}."
+                        )
+                    elif net_change < 0:
+                        st.warning(
+                            f"{root_metric} decreased by {abs(net_change):,.2f} from {baseline_period} to {comparison_period}."
+                        )
+                    else:
+                        st.info(f"No net change detected for {root_metric} between the selected periods.")
+
+                    contribution_df = root_result["contribution_df"]
+                    top_driver_df = contribution_df.head(top_n)
+
+                    st.write("Top Drivers by Absolute Change")
+                    st.bar_chart(
+                        top_driver_df.set_index("dimension")[["change"]],
+                        height=320,
+                    )
+
+                    positive_drivers = (
+                        contribution_df[contribution_df["change"] > 0]
+                        .sort_values(by="change", ascending=False)
+                        .head(top_n)
+                    )
+                    negative_drivers = (
+                        contribution_df[contribution_df["change"] < 0]
+                        .sort_values(by="change", ascending=True)
+                        .head(top_n)
+                    )
+
+                    driver_col1, driver_col2 = st.columns(2)
+
+                    with driver_col1:
+                        st.write("Positive Drivers")
+                        if positive_drivers.empty:
+                            st.caption("No positive drivers in this comparison.")
+                        else:
+                            st.dataframe(
+                                positive_drivers[
+                                    [
+                                        "dimension",
+                                        "baseline_value",
+                                        "comparison_value",
+                                        "change",
+                                        "contribution_pct",
+                                    ]
+                                ],
+                                width="stretch",
+                            )
+
+                    with driver_col2:
+                        st.write("Negative Drivers")
+                        if negative_drivers.empty:
+                            st.caption("No negative drivers in this comparison.")
+                        else:
+                            st.dataframe(
+                                negative_drivers[
+                                    [
+                                        "dimension",
+                                        "baseline_value",
+                                        "comparison_value",
+                                        "change",
+                                        "contribution_pct",
+                                    ]
+                                ],
+                                width="stretch",
+                            )
+
+                    with st.expander("Full Contribution Table", expanded=False):
+                        st.dataframe(contribution_df, width="stretch")
 
     if not api_key:
         st.info("Add your API key in the sidebar to enable AI chat analysis.")
