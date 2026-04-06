@@ -150,3 +150,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Generated analysis artifacts
+artifacts/

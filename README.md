@@ -8,6 +8,7 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
 ## Features
 
 - **CSV Upload & Preview**: Easily upload and preview your data
+- **Data Health Check**: See health score, missing values, duplicates, type issues, and outliers before AI analysis
 - **Quick Insights**: Instant dataset summary and correlation matrix
 - **Chart Generation**: Automatically generate visualizations and plots for your data
 - **Conversational AI**: Chat with your data using natural language
@@ -59,6 +60,8 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
 2. **Open your browser** to `http://localhost:8501`
 
 3. **Upload a CSV file** and start asking questions!
+
+You can run Data Health Check without an API key. Add your Groq API key only when you want AI chat analysis.
 
 ### Example Questions
 
