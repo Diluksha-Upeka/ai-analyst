@@ -34,7 +34,8 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
    ```
 
 3. **Activate virtual environment**:
-   - Windows: `.venv\Scripts\activate`
+   - Windows PowerShell: `. .\\.venv\\Scripts\\Activate.ps1`
+   - Windows CMD: `.venv\\Scripts\\activate.bat`
    - macOS/Linux: `source .venv/bin/activate`
 
 4. **Install dependencies**:
@@ -52,7 +53,7 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
 
 1. **Run the application**:
    ```bash
-   streamlit run app.py
+   .\\.venv\\Scripts\\python.exe -m streamlit run app.py
    ```
 
 2. **Open your browser** to `http://localhost:8501`
@@ -101,11 +102,16 @@ ai-data-analyst/
    - Ensure you're using the virtual environment
    - Run `pip install -r requirements.txt`
 
-2. **Rate limit exceeded**:
+2. **ImportError: cannot import name 'ModelProfile'**:
+   - This means Streamlit is running from a different Python install than your project `.venv`
+   - Use: `.\\.venv\\Scripts\\python.exe -m streamlit run app.py`
+   - Confirm with PowerShell: `Get-Command streamlit`
+
+3. **Rate limit exceeded**:
    - Switch to a smaller model (e.g., llama-3.1-8b-instant)
    - Upgrade your Groq plan for higher limits
 
-3. **Agent stops due to iteration limit**:
+4. **Agent stops due to iteration limit**:
    - Ask simpler, more specific questions
    - The limit is set to 15 iterations for complex queries
 

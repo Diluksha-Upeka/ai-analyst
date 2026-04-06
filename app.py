@@ -1,17 +1,74 @@
 import streamlit as st
 import pandas as pd
 import os
+import logging
+import importlib
+from pathlib import Path
+from uuid import uuid4
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
-from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
-try:
-    from langchain_classic.agents.agent_types import AgentType
-except ModuleNotFoundError:  # Back-compat with older LangChain layouts
-    from langchain.agents.agent_types import AgentType
+
+
+logging.basicConfig(
+    filename="app.log",
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+logger = logging.getLogger("ai_data_analyst")
+
+BLOCKED_QUERY_PATTERNS = [
+    "__import__",
+    "import os",
+    "import subprocess",
+    "os.system",
+    "subprocess",
+    "exec(",
+    "eval(",
+    "open(",
+    "rm -rf",
+    "del /f",
+    "cmd.exe",
+    "powershell",
+]
+
+
+@st.cache_data
+def load_csv(file):
+    return pd.read_csv(file)
+
+
+def is_query_safe(user_question):
+    lowered = user_question.lower()
+    for pattern in BLOCKED_QUERY_PATTERNS:
+        if pattern in lowered:
+            return False
+    return True
+
+
+def get_plot_path():
+    artifacts_dir = Path("artifacts")
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = uuid4().hex
+
+    return artifacts_dir / f"plot_{st.session_state.session_id}.png"
 
 
 @st.cache_resource
 def create_agent(_df, api_key, file_name, model_name):
+    try:
+        from langchain_groq import ChatGroq
+        from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
+        try:
+            from langchain_classic.agents.agent_types import AgentType
+        except ModuleNotFoundError:  # Back-compat with older LangChain layouts
+            AgentType = importlib.import_module("langchain.agents.agent_types").AgentType
+    except Exception as exc:
+        raise RuntimeError(
+            "LangChain dependencies are incompatible in this Python environment. "
+            "Run the app from the project virtual environment."
+        ) from exc
+
     llm = ChatGroq(
         groq_api_key=api_key,
         model_name=model_name,
@@ -48,6 +105,13 @@ with st.sidebar:
         "mixtral-8x7b-32768",
     ], help="Switch to a smaller model if you hit rate limits.")
 
+    st.markdown("### Safety")
+    execution_confirmed = st.checkbox(
+        "Enable advanced AI analysis",
+        value=False,
+        help="This runs AI-generated Python code for data analysis. Use only trusted CSV files.",
+    )
+
 # 2. Main UI
 st.title(" Chat with your Data (CSV)")
 
@@ -59,13 +123,10 @@ if uploaded_file is not None and api_key:
     if "current_file" not in st.session_state or st.session_state.current_file != uploaded_file.name:
         st.session_state.current_file = uploaded_file.name
         st.session_state.messages = []
-
-    # Load Data (cached)
-    @st.cache_data
-    def load_csv(file):
-        return pd.read_csv(file)
+        st.session_state.pop("session_id", None)
 
     df = load_csv(uploaded_file)
+    plot_path = get_plot_path()
     
     # Show Data Preview
     st.write("### Data Preview")
@@ -84,37 +145,64 @@ if uploaded_file is not None and api_key:
         if st.button("Correlation Matrix"):
             st.write(df.corr(numeric_only=True))
 
-    # 3. Setup the Agent (cached per file)
-    agent = create_agent(df, api_key, uploaded_file.name, model_name)
+    if not execution_confirmed:
+        st.info("Enable advanced AI analysis in the sidebar to run custom questions and chart generation.")
 
     # 4. Chat Interface
     st.write("### Ask a Question")
     user_question = st.text_input("Example: 'Plot a bar chart of Sales by Region and save it as plot.png'")
 
     if st.button("Analyze"):
-        if user_question:
+        if not execution_confirmed:
+            st.warning("Enable advanced AI analysis in the sidebar before running a question.")
+        elif not user_question.strip():
+            st.warning("Please enter a question first.")
+        elif not is_query_safe(user_question):
+            st.error("This question looks unsafe. Please remove system or file commands and try again.")
+        else:
             with st.spinner("Analyzing data..."):
                 try:
-                    # A. Cleanup: Delete old plot if it exists
-                    if os.path.exists("plot.png"):
-                        os.remove("plot.png")
+                    # Setup the agent only when analysis is explicitly enabled.
+                    agent = create_agent(df, api_key, uploaded_file.name, model_name)
 
-                    # B. The Prompt Injection
-                    # We secretly add this instruction to ensure the AI saves the file instead of showing it.
-                    enhanced_query = user_question + " If you generate a plot, save it as 'plot.png'. Do not use plt.show()."
+                    if plot_path.exists():
+                        plot_path.unlink()
 
-                    # C. Run Agent
+                    safe_plot_path = plot_path.as_posix()
+
+                    enhanced_query = (
+                        f"{user_question} "
+                        f"If you generate a plot, save it as '{safe_plot_path}'. "
+                        "Do not use plt.show()."
+                    )
+
+                    logger.info(
+                        "Analyze request | file=%s | model=%s | question=%s",
+                        uploaded_file.name,
+                        model_name,
+                        user_question[:200],
+                    )
+
                     response = agent.run(enhanced_query)
                     st.success("Analysis Complete!")
                     st.write(response)
 
-                    # D. Check for Plot
-                    # If the file appeared, display it!
-                    if os.path.exists("plot.png"):
-                        st.image("plot.png", caption="Generated Visualization")
+                    if plot_path.exists():
+                        st.image(str(plot_path), caption="Generated Visualization")
 
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    logger.exception(
+                        "Analyze failed | file=%s | model=%s",
+                        uploaded_file.name,
+                        model_name,
+                    )
+                    if "LangChain dependencies are incompatible" in str(e):
+                        st.error("Environment issue detected. Start Streamlit with the project venv interpreter.")
+                        st.code(".\\.venv\\Scripts\\python.exe -m streamlit run app.py")
+                    else:
+                        st.error("Analysis failed. Try a simpler question or switch to a smaller model.")
+                    with st.expander("Technical details"):
+                        st.write(str(e))
                     
 elif not api_key:
     st.warning("Please enter an API Key to proceed.")
