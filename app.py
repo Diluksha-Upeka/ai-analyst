@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import os
 import logging
 import importlib
@@ -372,6 +373,84 @@ def compute_root_cause_period(
     }
 
 
+def aggregate_numeric(series, agg_method):
+    if agg_method == "Mean":
+        return float(series.mean())
+    if agg_method == "Median":
+        return float(series.median())
+    return float(series.sum())
+
+
+def compute_what_if_simulation(_df, target_metric, driver_adjustments, agg_method):
+    target_series = pd.to_numeric(_df[target_metric], errors="coerce").dropna()
+    if target_series.empty:
+        return None
+
+    baseline_target = aggregate_numeric(target_series, agg_method)
+    impacts = []
+
+    for driver_column, pct_change in driver_adjustments:
+        driver_series = pd.to_numeric(_df[driver_column], errors="coerce").dropna()
+        if driver_series.empty:
+            continue
+
+        baseline_driver = aggregate_numeric(driver_series, agg_method)
+        scenario_driver = baseline_driver * (1 + (pct_change / 100.0))
+        delta_driver = scenario_driver - baseline_driver
+
+        pair_df = _df[[target_metric, driver_column]].copy()
+        pair_df[target_metric] = pd.to_numeric(pair_df[target_metric], errors="coerce")
+        pair_df[driver_column] = pd.to_numeric(pair_df[driver_column], errors="coerce")
+        pair_df = pair_df.dropna()
+
+        slope = 0.0
+        r2 = 0.0
+        if len(pair_df) >= 3:
+            x = pair_df[driver_column].to_numpy(dtype=float)
+            y = pair_df[target_metric].to_numpy(dtype=float)
+
+            x_variance = float(np.var(x))
+            if x_variance > 0:
+                covariance = float(np.cov(x, y, ddof=0)[0, 1])
+                slope = covariance / x_variance
+
+                corr_matrix = np.corrcoef(x, y)
+                correlation = float(corr_matrix[0, 1]) if corr_matrix.size >= 4 else 0.0
+                if np.isfinite(correlation):
+                    r2 = correlation ** 2
+
+        predicted_delta = slope * delta_driver
+        impacts.append(
+            {
+                "driver": driver_column,
+                "baseline_driver": round(baseline_driver, 4),
+                "scenario_change_pct": round(float(pct_change), 2),
+                "scenario_driver": round(scenario_driver, 4),
+                "slope_estimate": round(slope, 4),
+                "relationship_strength_r2": round(r2, 4),
+                "predicted_metric_impact": round(predicted_delta, 4),
+            }
+        )
+
+    if not impacts:
+        return None
+
+    impact_df = pd.DataFrame(impacts)
+    net_delta = float(impact_df["predicted_metric_impact"].sum())
+    projected_target = baseline_target + net_delta
+    projected_pct = None
+    if baseline_target != 0:
+        projected_pct = (net_delta / baseline_target) * 100
+
+    return {
+        "baseline_target": round(baseline_target, 4),
+        "projected_target": round(projected_target, 4),
+        "net_delta": round(net_delta, 4),
+        "projected_pct": None if projected_pct is None else round(projected_pct, 2),
+        "impact_df": impact_df,
+    }
+
+
 def is_query_safe(user_question):
     lowered = user_question.lower()
     for pattern in BLOCKED_QUERY_PATTERNS:
@@ -714,6 +793,98 @@ if uploaded_file is not None:
 
                     with st.expander("Full Contribution Table", expanded=False):
                         st.dataframe(contribution_df, width="stretch")
+
+    # Day 4 - What-If Simulator workflow
+    st.write("### What-If Simulator")
+    st.caption("Test KPI impact by changing one or more numeric drivers.")
+
+    scenario_numeric_columns = df.select_dtypes(include=["number"]).columns.tolist()
+    if len(scenario_numeric_columns) < 2:
+        st.info("What-If Simulator needs at least two numeric columns (one metric and one driver).")
+    else:
+        target_metric = st.selectbox(
+            "Target metric",
+            scenario_numeric_columns,
+            key="scenario_target_metric",
+        )
+
+        driver_options = [column for column in scenario_numeric_columns if column != target_metric]
+        selected_drivers = st.multiselect(
+            "Drivers to simulate",
+            driver_options,
+            default=driver_options[:1],
+            max_selections=3,
+            key="scenario_drivers",
+            help="Choose up to 3 numeric drivers.",
+        )
+
+        agg_method = st.selectbox(
+            "Aggregation",
+            ["Sum", "Mean", "Median"],
+            key="scenario_aggregation",
+            help="Controls how baseline metric and drivers are summarized before applying scenario changes.",
+        )
+
+        if not selected_drivers:
+            st.info("Select at least one driver to run a scenario.")
+        else:
+            driver_adjustments = []
+            for driver_column in selected_drivers:
+                pct_change = st.slider(
+                    f"{driver_column} change (%)",
+                    min_value=-50,
+                    max_value=50,
+                    value=0,
+                    step=1,
+                    key=f"scenario_change_{driver_column}",
+                )
+                driver_adjustments.append((driver_column, pct_change))
+
+            run_scenario = st.button("Run What-If Scenario")
+            if run_scenario:
+                scenario_result = compute_what_if_simulation(
+                    df,
+                    target_metric,
+                    tuple(driver_adjustments),
+                    agg_method,
+                )
+
+                if scenario_result is None:
+                    st.warning("Not enough valid numeric data to compute this scenario.")
+                else:
+                    summary_col1, summary_col2, summary_col3 = st.columns(3)
+                    baseline_target = scenario_result["baseline_target"]
+                    projected_target = scenario_result["projected_target"]
+                    net_delta = scenario_result["net_delta"]
+                    projected_pct = scenario_result["projected_pct"]
+
+                    with summary_col1:
+                        st.metric("Baseline Target", f"{baseline_target:,.2f}")
+
+                    with summary_col2:
+                        delta_text = "n/a" if projected_pct is None else f"{projected_pct:+.2f}%"
+                        st.metric("Projected Target", f"{projected_target:,.2f}", delta=delta_text)
+
+                    with summary_col3:
+                        st.metric("Estimated Net Impact", f"{net_delta:,.2f}")
+
+                    impact_df = scenario_result["impact_df"].copy()
+                    if net_delta > 0:
+                        st.success(f"Scenario projects an increase of {net_delta:,.2f} in {target_metric}.")
+                    elif net_delta < 0:
+                        st.warning(f"Scenario projects a decrease of {abs(net_delta):,.2f} in {target_metric}.")
+                    else:
+                        st.info("Scenario projects no net change in the target metric.")
+
+                    st.write("Driver Impacts")
+                    st.bar_chart(
+                        impact_df.set_index("driver")[["predicted_metric_impact"]],
+                        height=300,
+                    )
+                    st.dataframe(impact_df, width="stretch")
+                    st.caption(
+                        "Impact is estimated from historical linear relationships (slope) and should be treated as directional guidance."
+                    )
 
     if not api_key:
         st.info("Add your API key in the sidebar to enable AI chat analysis.")

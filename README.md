@@ -10,6 +10,7 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
 - **CSV Upload & Preview**: Easily upload and preview your data
 - **Data Health Check**: See health score, missing values, duplicates, type issues, and outliers before AI analysis
 - **Root Cause Explorer**: Compare two periods and identify which categories drove metric changes
+- **What-If Simulator**: Apply scenario changes to numeric drivers and estimate KPI impact
 - **Quick Insights**: Instant dataset summary and correlation matrix
 - **Chart Generation**: Automatically generate visualizations and plots for your data
 - **Conversational AI**: Chat with your data using natural language
@@ -65,6 +66,8 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
 You can run Data Health Check without an API key. Add your Groq API key only when you want AI chat analysis.
 
 Root Cause Explorer works best when your CSV includes a date column and at least one categorical column.
+
+What-If Simulator needs at least two numeric columns (one target metric and one or more driver columns).
 
 ### Example Questions
 
