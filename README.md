@@ -11,6 +11,7 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
 - **Data Health Check**: See health score, missing values, duplicates, type issues, and outliers before AI analysis
 - **Root Cause Explorer**: Compare two periods and identify which categories drove metric changes
 - **What-If Simulator**: Apply scenario changes to numeric drivers and estimate KPI impact
+- **Analysis Journal**: Save snapshots of analyses and export reproducibility logs as JSON/CSV
 - **Quick Insights**: Instant dataset summary and correlation matrix
 - **Chart Generation**: Automatically generate visualizations and plots for your data
 - **Conversational AI**: Chat with your data using natural language
@@ -69,6 +70,8 @@ Root Cause Explorer works best when your CSV includes a date column and at least
 
 What-If Simulator needs at least two numeric columns (one target metric and one or more driver columns).
 
+Analysis Journal records Data Health, Root Cause, What-If, and AI chat outputs so you can showcase a reproducible analysis trail.
+
 ### Example Questions
 
 - "What are the top 5 highest-performing students?"
@@ -95,12 +98,17 @@ If you don't have a `.env` file, you can enter your Groq API key directly in the
 
 ```
 ai-data-analyst/
-├── app.py                 # Main Streamlit application
-├── requirements.txt       # Python dependencies
-├── .env                   # Environment variables (not committed)
-├── .gitignore            # Git ignore rules
-├── README.md             # This file
-└── data.csv              # Sample data file
+├── app.py                  # Main Streamlit application (UI orchestration)
+├── analytics/              # Core analytics modules
+│   ├── __init__.py
+│   ├── data_health.py      # Data health scoring logic
+│   ├── root_cause.py       # Root cause period comparison logic
+│   └── what_if.py          # Scenario simulation logic
+├── requirements.txt        # Python dependencies
+├── .env                    # Environment variables (not committed)
+├── .gitignore              # Git ignore rules
+├── README.md               # This file
+└── data.csv                # Sample data file
 ```
 
 ## Troubleshooting
