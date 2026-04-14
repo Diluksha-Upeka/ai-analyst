@@ -4,6 +4,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List
 from uuid import uuid4
 
 import pandas as pd
@@ -94,6 +95,56 @@ def is_query_safe(user_question):
         if pattern in lowered:
             return False
     return True
+
+
+def find_dimension_candidates(df, excluded_columns):
+    return [
+        column
+        for column in df.columns
+        if column not in excluded_columns
+        and (
+            pd.api.types.is_object_dtype(df[column])
+            or pd.api.types.is_string_dtype(df[column])
+            or pd.api.types.is_bool_dtype(df[column])
+            or (
+                pd.api.types.is_integer_dtype(df[column])
+                and 2 <= df[column].nunique(dropna=True) <= 40
+            )
+        )
+    ]
+
+
+def get_sample_dataset_path():
+    sample_path = Path("sample_showcase_data.csv")
+    return sample_path if sample_path.exists() else None
+
+
+def get_sample_dataset_bytes():
+    sample_path = get_sample_dataset_path()
+    if sample_path is not None:
+        return sample_path.read_bytes()
+    return None
+
+
+def get_prompt_templates() -> List[tuple[str, str]]:
+    return [
+        (
+            "Revenue trend summary",
+            "Summarize the monthly revenue trend and highlight biggest jumps.",
+        ),
+        (
+            "Chart revenue by region",
+            "Plot a bar chart of revenue by region and save it as plot.png.",
+        ),
+        (
+            "Promo impact",
+            "Compare average revenue and quantity between promo and non-promo orders.",
+        ),
+        (
+            "Category root cause",
+            "Explain which product categories contributed most to recent revenue change.",
+        ),
+    ]
 
 
 def initialize_file_session(file_name):
@@ -253,6 +304,64 @@ def render_quick_insights_section(df):
             st.write(df.corr(numeric_only=True))
 
 
+def render_demo_assistant_section(df):
+    st.write("### Demo Assistant")
+    st.caption("Day 6: Use this checklist and prompt templates for an interview-ready walkthrough.")
+
+    sample_bytes = get_sample_dataset_bytes()
+    if sample_bytes is not None:
+        st.download_button(
+            "Download Sample Showcase CSV",
+            data=sample_bytes,
+            file_name="sample_showcase_data.csv",
+            mime="text/csv",
+            key="download_sample_showcase_csv",
+        )
+
+    numeric_columns = df.select_dtypes(include=["number"]).columns.tolist()
+    date_columns = detect_date_columns_cached(df)
+    dimension_candidates = find_dimension_candidates(df, excluded_columns=date_columns)
+
+    readiness_df = pd.DataFrame(
+        [
+            {
+                "feature": "Data Health Check",
+                "requirement": "Any CSV dataset",
+                "ready": "Yes" if len(df) > 0 else "No",
+            },
+            {
+                "feature": "Root Cause Explorer",
+                "requirement": "Date + numeric metric + category",
+                "ready": "Yes"
+                if date_columns and numeric_columns and dimension_candidates
+                else "No",
+            },
+            {
+                "feature": "What-If Simulator",
+                "requirement": "At least 2 numeric columns",
+                "ready": "Yes" if len(numeric_columns) >= 2 else "No",
+            },
+            {
+                "feature": "AI Chat Analysis",
+                "requirement": "API key + advanced analysis enabled",
+                "ready": "Check sidebar",
+            },
+        ]
+    )
+    st.dataframe(readiness_df, width="stretch")
+
+    st.write("Prompt Templates")
+    template_col1, template_col2 = st.columns(2)
+    templates = get_prompt_templates()
+
+    for index, (label, prompt) in enumerate(templates):
+        target_col = template_col1 if index % 2 == 0 else template_col2
+        with target_col:
+            if st.button(f"Use Template: {label}", key=f"prompt_template_{index}"):
+                st.session_state.ai_question = prompt
+                st.success(f"Loaded template: {label}")
+
+
 def render_root_cause_section(df):
     st.write("### Root Cause Explorer")
     st.caption("Explain what drove metric change between two time periods.")
@@ -270,21 +379,10 @@ def render_root_cause_section(df):
 
     root_metric = st.selectbox("Metric to explain", numeric_columns, key="root_metric")
 
-    dimension_candidates = [
-        column
-        for column in df.columns
-        if column != root_metric
-        and column not in date_columns
-        and (
-            pd.api.types.is_object_dtype(df[column])
-            or pd.api.types.is_string_dtype(df[column])
-            or pd.api.types.is_bool_dtype(df[column])
-            or (
-                pd.api.types.is_integer_dtype(df[column])
-                and 2 <= df[column].nunique(dropna=True) <= 40
-            )
-        )
-    ]
+    dimension_candidates = find_dimension_candidates(
+        df,
+        excluded_columns=date_columns + [root_metric],
+    )
 
     if not dimension_candidates:
         st.info("Root Cause Explorer needs at least one categorical column for breakdown.")
@@ -651,8 +749,14 @@ def render_chat_section(df, api_key, model_name, execution_confirmed, uploaded_f
     if not execution_confirmed:
         st.info("Enable advanced AI analysis in the sidebar to run custom questions and chart generation.")
 
+    if "ai_question" not in st.session_state:
+        st.session_state.ai_question = ""
+
     st.write("### Ask a Question")
-    user_question = st.text_input("Example: 'Plot a bar chart of Sales by Region and save it as plot.png'")
+    user_question = st.text_input(
+        "Example: 'Plot a bar chart of Sales by Region and save it as plot.png'",
+        key="ai_question",
+    )
 
     if st.button("Analyze"):
         if not execution_confirmed:
@@ -755,23 +859,44 @@ def main():
     st.title(" Chat with your Data (CSV)")
     uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
 
-    if uploaded_file is None:
-        st.info("Upload a CSV file to start exploring Data Health, Root Cause, What-If, and AI analysis.")
-        return
+    active_file_name = None
+    active_source = None
 
-    initialize_file_session(uploaded_file.name)
-    df = load_csv(uploaded_file)
+    if uploaded_file is not None:
+        st.session_state.use_sample_dataset = False
+        active_file_name = uploaded_file.name
+        active_source = uploaded_file
+    else:
+        sample_path = get_sample_dataset_path()
+        if sample_path is not None:
+            st.caption("No file uploaded. Use the built-in sample dataset for a quick full demo.")
+            load_sample_now = st.button("Load Sample Showcase Dataset", key="load_sample_showcase_dataset")
+
+            if load_sample_now:
+                st.session_state.use_sample_dataset = True
+
+            if st.session_state.get("use_sample_dataset"):
+                active_file_name = sample_path.name
+                active_source = sample_path
+
+        if active_source is None:
+            st.info("Upload a CSV file to start exploring Data Health, Root Cause, What-If, and AI analysis.")
+            return
+
+    initialize_file_session(active_file_name)
+    df = load_csv(active_source)
     plot_path = get_plot_path()
 
     st.write("### Data Preview")
     st.dataframe(df.head())
 
+    render_demo_assistant_section(df)
     render_data_health_section(df)
     render_quick_insights_section(df)
     render_root_cause_section(df)
     render_what_if_section(df)
     render_analysis_journal_section()
-    render_chat_section(df, api_key, model_name, execution_confirmed, uploaded_file.name, plot_path)
+    render_chat_section(df, api_key, model_name, execution_confirmed, active_file_name, plot_path)
 
 
 if __name__ == "__main__":

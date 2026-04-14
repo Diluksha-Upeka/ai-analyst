@@ -1,0 +1,43 @@
+order_id,order_date,region,product_category,sales_channel,is_promo,quantity,unit_price,discount_pct,marketing_spend,revenue,shipping_cost,customer_satisfaction,marketing_spend_text
+O-1001,2025-01-03,North,Electronics,Online,True,12,220,5,900,2508,45,4.5,900
+O-1002,2025-01-05,South,Furniture,Retail,False,8,340,2,500,2666,62,4.2,500
+O-1003,2025-01-07,East,Office Supplies,Wholesale,False,30,45,0,300,1350,40,4.0,300
+O-1004,2025-01-11,West,Electronics,Retail,True,10,210,8,850,1932,55,4.4,850
+O-1005,2025-01-15,North,Furniture,Online,True,6,410,10,700,2214,68,4.6,700
+O-1006,2025-01-20,South,Office Supplies,Online,False,28,42,3,280,1141.68,38,4.1,280
+O-1007,2025-02-02,East,Electronics,Online,True,14,230,6,980,3026.8,48,4.6,980
+O-1008,2025-02-06,West,Furniture,Retail,False,7,360,1,520,2494.8,64,4.1,520
+O-1009,2025-02-08,North,Office Supplies,Wholesale,False,35,44,0,320,1540,42,3.9,320
+O-1010,2025-02-12,South,Electronics,Retail,True,11,225,7,930,2301.75,54,4.3,930
+O-1011,2025-02-18,East,Furniture,Online,True,5,430,12,760,1892,70,4.7,760
+O-1012,2025-02-22,West,Office Supplies,Online,False,32,43,2,290,1348.48,39,4.0,290
+O-1012,2025-02-22,West,Office Supplies,Online,False,32,43,2,290,1348.48,39,4.0,290
+O-1013,2025-03-03,North,Electronics,Online,True,16,235,5,1020,3572,50,4.7,1020
+O-1014,2025-03-06,South,Furniture,Retail,False,9,355,2,540,3131.1,65,4.2,540
+O-1015,2025-03-10,East,Office Supplies,Wholesale,False,36,46,0,340,1656,44,4.1,340
+O-1016,2025-03-14,West,Electronics,Retail,True,12,228,9,950,2489.28,56,4.4,950
+O-1017,2025-03-18,North,Furniture,Online,True,7,420,11,780,2616.6,71,4.8,780
+O-1018,2025-03-25,South,Office Supplies,Online,False,34,41,4,300,1338.24,37,4.0,300
+O-1019,2025-04-01,East,Electronics,Online,True,18,240,4,1100,4147.2,52,4.8,1100
+O-1020,2025-04-05,West,Furniture,Retail,False,10,365,3,560,3540.5,66,4.2,560
+O-1021,2025-04-09,North,Office Supplies,Wholesale,False,38,47,0,350,1786,45,4.1,350
+O-1022,2025-04-13,South,Electronics,Retail,True,13,232,6,980,2831.36,57,4.5,980
+O-1023,2025-04-18,East,Furniture,Online,True,8,435,13,820,3027.6,72,4.9,820
+O-1024,2025-04-24,West,Office Supplies,Online,False,33,44,2,305,1422.96,,4.0,305
+O-1025,2025-05-02,North,Electronics,Online,True,20,245,5,1200,4655,53,4.9,1200
+O-1026,2025-05-06,South,Furniture,Retail,False,11,370,2,590,3988.6,67,4.3,590
+O-1027,2025-05-11,East,Office Supplies,Wholesale,False,40,48,0,360,1920,46,4.2,360
+O-1028,2025-05-15,West,Electronics,Retail,True,14,238,8,1010,3064.88,58,4.5,1010
+O-1029,2025-05-19,North,Furniture,Online,True,9,440,10,840,3564,73,4.9,840
+O-1030,2025-05-26,South,Office Supplies,Online,False,36,42,3,315,1466.64,39,4.1,315
+O-1031,2025-06-03,East,Electronics,Online,True,22,250,4,1300,5280,55,5.0,1300
+O-1032,2025-06-08,West,Furniture,Retail,False,12,372,2,610,4374.72,68,4.3,610
+O-1033,2025-06-12,North,Office Supplies,Wholesale,False,42,49,0,380,2058,47,4.2,380
+O-1034,2025-06-15,South,Electronics,Retail,True,15,242,7,1040,3375.9,59,4.6,1040
+O-1035,2025-06-19,East,Furniture,Online,True,10,445,12,860,3916,74,5.0,860
+O-1036,2025-06-23,West,Office Supplies,Online,False,35,43,,320,1505,40,4.1,320
+O-1037,2025-06-25,,Electronics,Online,True,17,248,5,1180,4005.2,54,4.7,1180
+O-1038,2025-06-27,North,Office Supplies,Online,False,34,44,2,abc,1466.08,41,4.0,abc
+O-1039,2025-06-28,West,Electronics,Online,True,300,180,2,9500,52920,780,4.9,9500
+O-1040,2025-06-29,South,Furniture,Retail,False,12,375,2,620,4410,69,,620
+O-1041,2025/06/30,East,Office Supplies,Wholesale,False,39,47,1,370,1815.99,46,4.2,370

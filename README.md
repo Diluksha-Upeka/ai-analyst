@@ -12,6 +12,7 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
 - **Root Cause Explorer**: Compare two periods and identify which categories drove metric changes
 - **What-If Simulator**: Apply scenario changes to numeric drivers and estimate KPI impact
 - **Analysis Journal**: Save snapshots of analyses and export reproducibility logs as JSON/CSV
+- **Demo Assistant**: Feature readiness checklist, one-click sample dataset download, and AI prompt templates
 - **Quick Insights**: Instant dataset summary and correlation matrix
 - **Chart Generation**: Automatically generate visualizations and plots for your data
 - **Conversational AI**: Chat with your data using natural language
@@ -63,6 +64,9 @@ An intelligent data analysis tool built with Streamlit, LangChain, and Groq. Upl
 2. **Open your browser** to `http://localhost:8501`
 
 3. **Upload a CSV file** and start asking questions!
+   - Or click **Load Sample Showcase Dataset** to run the full demo immediately.
+
+For a fast showcase flow, upload `sample_showcase_data.csv` included in this repo.
 
 You can run Data Health Check without an API key. Add your Groq API key only when you want AI chat analysis.
 
@@ -71,6 +75,28 @@ Root Cause Explorer works best when your CSV includes a date column and at least
 What-If Simulator needs at least two numeric columns (one target metric and one or more driver columns).
 
 Analysis Journal records Data Health, Root Cause, What-If, and AI chat outputs so you can showcase a reproducible analysis trail.
+
+Demo Assistant gives you a quick readiness table for each feature and lets you load prompt templates into the AI question box.
+
+## Interview Demo Flow (5-7 Minutes)
+
+1. Upload `sample_showcase_data.csv`.
+2. Open **Demo Assistant** and confirm readiness is `Yes` for Root Cause and What-If.
+3. Show **Data Health Check**:
+   - Highlight missing values, duplicate rows, and outliers.
+   - Save a snapshot to Analysis Journal.
+4. Show **Root Cause Explorer**:
+   - Metric: `revenue`
+   - Dimension: `product_category` or `region`
+   - Compare latest two monthly periods.
+   - Save snapshot.
+5. Show **What-If Simulator**:
+   - Target metric: `revenue`
+   - Drivers: `discount_pct`, `marketing_spend`
+   - Apply +/- changes and run scenario.
+   - Save snapshot.
+6. Use a **Demo Assistant prompt template** in AI Chat and run one chart question.
+7. Export **Analysis Journal** as JSON/CSV to show reproducibility.
 
 ### Example Questions
 
@@ -109,6 +135,7 @@ ai-data-analyst/
 ├── .gitignore              # Git ignore rules
 ├── README.md               # This file
 └── data.csv                # Sample data file
+└── sample_showcase_data.csv # Interview demo dataset with built-in anomalies
 ```
 
 ## Troubleshooting
